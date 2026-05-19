@@ -13,7 +13,9 @@
             --neon-purple: #9b51e0;
             --neon-green: #05ffc3;
             --gold-premium: #eab308;
+            --ultra-red: #ff0055;
             --text-glow: 0 0 10px rgba(0, 242, 254, 0.5);
+            --staff-glow: 0 0 15px rgba(255, 0, 85, 0.6);
         }
 
         body {
@@ -109,6 +111,44 @@
         .btn-gold:hover {
             transform: scale(1.05);
             box-shadow: 0 0 25px rgba(234, 179, 8, 0.6);
+        }
+
+        /* Hidden Config Top Panel */
+        #config-panel {
+            background-color: #070a13; 
+            padding: 20px; 
+            border-bottom: 2px solid var(--panel-border); 
+            display: none; 
+            flex-direction: column;
+            gap: 15px;
+            align-items: center;
+        }
+
+        .admin-row {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            width: 100%;
+            max-width: 800px;
+        }
+
+        #config-panel input {
+            background:#131c31; 
+            border:1px solid var(--panel-border); 
+            color:white; 
+            padding:10px; 
+            border-radius:6px; 
+            flex: 1;
+        }
+
+        .whitelist-box {
+            background: #131c31;
+            border: 1px solid var(--panel-border);
+            border-radius: 8px;
+            padding: 10px;
+            width: 100%;
+            max-width: 800px;
+            box-sizing: border-box;
         }
 
         /* Main Workspace App Layout */
@@ -283,6 +323,7 @@
 
         .badge-free { background: rgba(16, 185, 129, 0.15); color: #10b981; }
         .badge-premium { background: rgba(234, 179, 8, 0.15); color: var(--gold-premium); }
+        .badge-ultra { background: rgba(255, 0, 85, 0.2); color: var(--ultra-red); border: 1px solid var(--ultra-red); }
 
         /* Full Screen Portal Overlays (Sign Up / Paywall) */
         .portal-overlay {
@@ -354,15 +395,27 @@
             </div>
         </div>
         <div class="header-controls">
-            <button class="cyber-btn btn-blue" onclick="openPortal('auth-portal')">Sign Up / Register</button>
-            <button class="cyber-btn btn-gold" onclick="openPortal('pricing-portal')">💎 Go Premium</button>
+            <button class="cyber-btn btn-blue" id="nav-auth-btn" onclick="openPortal('auth-portal')">Sign Up / Register</button>
+            <button class="cyber-btn btn-gold" id="nav-premium-btn" onclick="openPortal('pricing-portal')">💎 Go Premium</button>
             <button class="cyber-btn btn-blue" style="padding:10px;" onclick="toggleAdmin()">⚙️</button>
         </div>
     </header>
 
-    <div id="config-panel" style="display:none; background:#070a13; padding:15px; border-bottom:1px solid var(--panel-border); justify-content:center; gap:15px;">
-        <input type="password" id="admin-key" placeholder="Enter OpenRouter API Key (sk-or-v1-...)" style="background:#131c31; border:1px solid var(--panel-border); color:white; padding:8px; border-radius:6px; width:300px;" />
-        <button class="cyber-btn btn-blue" onclick="saveAdminKey()">Mount Core Key</button>
+    <div id="config-panel">
+        <div class="admin-row">
+            <input type="password" id="admin-key" placeholder="Enter OpenRouter API Key (sk-or-v1-...)" />
+            <button class="cyber-btn btn-blue" onclick="saveAdminKey()">Mount Core Key</button>
+        </div>
+        <div class="whitelist-box">
+            <div style="font-size: 0.8rem; color: #64748b; margin-bottom: 8px; font-weight: bold; text-transform: uppercase;">🔒 Exclusive Staff Whitelist (Developer Overlord System)</div>
+            <div style="display: flex; gap: 10px;">
+                <input type="email" id="whitelist-input" placeholder="Add exclusive teammate email (e.g., friend@domain.com)" style="flex: 1; padding: 8px; background: #070a13; border: 1px solid var(--panel-border); color: white; border-radius: 6px;" />
+                <button class="cyber-btn btn-blue" style="padding: 8px 15px;" onclick="addEmailToWhitelist()">Authorize Email</button>
+            </div>
+            <div style="margin-top: 10px; font-size: 0.75rem; color: var(--text-muted);">
+                <strong>Currently Whitelisted Staff Channels:</strong> <span id="whitelist-display" style="color: var(--neon-blue)">None</span>
+            </div>
+        </div>
     </div>
 
     <div id="main-app">
@@ -415,7 +468,7 @@
         <div class="model-card" id="card-gpt">
             <div class="card-meta">
                 <strong style="font-size:1.1rem;">ChatGPT 4o</strong>
-                <span class="badge badge-premium">PRO TIER</span>
+                <span class="badge badge-premium" id="badge-gpt-text">PRO TIER</span>
             </div>
             <p style="margin:0; font-size:0.8rem; color:#94a3b8;">High logical depth reasoning, advanced analytics tracking, and layout formatting architecture.</p>
             <button class="cyber-btn btn-blue" style="width:100%;" onclick="verifyAccess('openai/gpt-4o', 'card-gpt')">Lock Core</button>
@@ -423,7 +476,7 @@
         <div class="model-card" id="card-claude">
             <div class="card-meta">
                 <strong style="font-size:1.1rem;">Claude 3.5 Sonnet</strong>
-                <span class="badge badge-premium">PRO TIER</span>
+                <span class="badge badge-premium" id="badge-claude-text">PRO TIER</span>
             </div>
             <p style="margin:0; font-size:0.8rem; color:#94a3b8;">Industry standard contextual understanding, complex engineering logic maps, and prose evaluation.</p>
             <button class="cyber-btn btn-blue" style="width:100%;" onclick="verifyAccess('anthropic/claude-3.5-sonnet', 'card-claude')">Lock Core</button>
@@ -474,25 +527,34 @@
 
     <script>
         let selectedModelEndpoint = "openrouter/free";
-        let subscriptionUnlocked = false;
+        let userAccessLevel = "GUEST"; // Modes: GUEST, PREMIUM, ULTRA_STAFF
         let loggedInUser = "";
         let globalPromptCounter = 0;
 
+        // In-memory whitelist initialization array
+        let authorizedStaffEmails = ["admin@core.ai", "developer@core.ai"];
+
         window.onload = function() {
-            // Restore persistent keys/states
+            // Restore API configuration keys
             const savedKey = localStorage.getItem('master_or_key');
             if (savedKey) document.getElementById('admin-key').value = savedKey;
 
-            const profileName = localStorage.getItem('operator_name');
-            if(profileName) {
-                loggedInUser = profileName;
-                document.querySelector('[onclick*="auth-portal"]').textContent = `Profile: ${profileName}`;
-                logTerminal(`[AUTH] Welcome back operator node: ${profileName}`);
+            // Load staff list modifications from cache
+            const customWhitelist = localStorage.getItem('staff_whitelist');
+            if (customWhitelist) {
+                authorizedStaffEmails = JSON.parse(customWhitelist);
             }
+            updateWhitelistUI();
 
-            subscriptionUnlocked = localStorage.getItem('pro_license_active') === 'true';
-            if(subscriptionUnlocked) {
-                applyProLayout();
+            // Check current profile configuration status
+            const profileName = localStorage.getItem('operator_name');
+            const profileEmail = localStorage.getItem('operator_email');
+            if(profileName && profileEmail) {
+                loggedInUser = profileName;
+                document.getElementById('nav-auth-btn').textContent = `Node: ${profileName}`;
+                
+                // Run whitelist scanner check on saved account data
+                evaluatePermissions(profileEmail);
             }
         }
 
@@ -505,9 +567,34 @@
             const val = document.getElementById('admin-key').value.trim();
             if(val) {
                 localStorage.setItem('master_or_key', val);
-                logTerminal("[SYSTEM] OpenRouter credentials bound to local application runtime memory.");
+                logTerminal("[SYSTEM] Core system network keys mounted into local environment memory structures.");
                 document.getElementById('config-panel').style.display = 'none';
             }
+        }
+
+        // Live Console whitelisting mechanisms
+        function addEmailToWhitelist() {
+            const emailInp = document.getElementById('whitelist-input');
+            const targetEmail = emailInp.value.trim().toLowerCase();
+            if(!targetEmail) return;
+
+            if(!authorizedStaffEmails.includes(targetEmail)) {
+                authorizedStaffEmails.push(targetEmail);
+                localStorage.setItem('staff_whitelist', JSON.stringify(authorizedStaffEmails));
+                updateWhitelistUI();
+                logTerminal(`[STAFF] Whitelist updated. Authorized access credentials node: ${targetEmail}`);
+                emailInp.value = '';
+                
+                // Real-time re-evaluation if the currently logged-in user was just added
+                const profileEmail = localStorage.getItem('operator_email');
+                if (profileEmail && profileEmail.toLowerCase() === targetEmail) {
+                    evaluatePermissions(profileEmail);
+                }
+            }
+        }
+
+        function updateWhitelistUI() {
+            document.getElementById('whitelist-display').textContent = authorizedStaffEmails.join(", ");
         }
 
         function openPortal(id) { document.getElementById(id).style.display = 'flex'; }
@@ -518,50 +605,92 @@
             el.innerHTML += `<br>${msg}`;
         }
 
-        // Account Registration Module
+        // Account Registration Gate
         function registerUser() {
             const name = document.getElementById('reg-name').value.trim();
-            const email = document.getElementById('reg-email').value.trim();
+            const email = document.getElementById('reg-email').value.trim().toLowerCase();
             if(!name || !email) { alert("Please complete form specifications."); return; }
 
             localStorage.setItem('operator_name', name);
             localStorage.setItem('operator_email', email);
             loggedInUser = name;
 
-            document.querySelector('[onclick*="auth-portal"]').textContent = `Profile: ${name}`;
-            logTerminal(`[AUTH] Registered new structural endpoint node: ${name}`);
+            document.getElementById('nav-auth-btn').textContent = `Node: ${name}`;
+            logTerminal(`[AUTH] Synchronized registration metadata cluster map for user: ${name}`);
+            
+            // Check credentials against staff registry rules
+            evaluatePermissions(email);
             closePortal('auth-portal');
+        }
+
+        // Automated Clearance Checker Logic
+        function evaluatePermissions(email) {
+            if (authorizedStaffEmails.includes(email.toLowerCase())) {
+                userAccessLevel = "ULTRA_STAFF";
+                applyUltraStaffLayout();
+            } else {
+                // Check if they previously paid for premium
+                const spentActive = localStorage.getItem('pro_license_active') === 'true';
+                if (spentActive) {
+                    userAccessLevel = "PREMIUM";
+                    applyPremiumLayout();
+                } else {
+                    userAccessLevel = "GUEST";
+                }
+            }
         }
 
         // Subscription Activation Sim
         let pendingSelection = "";
         function selectPaymentPlan(name, price) {
             pendingSelection = name;
-            logTerminal(`[PAY] Staged plan model selection matrix: ${name}`);
         }
 
         function triggerSubscription() {
             if(!loggedInUser) {
-                alert("Please initialize your Registration Profile before checking out structural licenses.");
+                alert("Please initialize your profile configuration using the sign-up register framework first.");
                 closePortal('pricing-portal');
                 openPortal('auth-portal');
                 return;
             }
-            if(!pendingSelection) { alert("Please click a pricing model card to select it."); return; }
+            if(userAccessLevel === "ULTRA_STAFF") {
+                alert("You are registered as a Staff Overlord node! Paid licenses are irrelevant to your architecture clear lines.");
+                closePortal('pricing-portal');
+                return;
+            }
+            if(!pendingSelection) { alert("Please choose a license card option context."); return; }
 
-            logTerminal(`[PAY] Handshaking secure payment endpoint for ${pendingSelection}...`);
-            subscriptionUnlocked = true;
+            userAccessLevel = "PREMIUM";
             localStorage.setItem('pro_license_active', 'true');
-            applyProLayout();
+            applyPremiumLayout();
             closePortal('pricing-portal');
         }
 
-        function applyProLayout() {
+        function applyPremiumLayout() {
             document.getElementById('current-tier').textContent = "PRO_TIER";
             document.getElementById('current-tier').style.color = "var(--gold-premium)";
-            document.querySelector('[onclick*="pricing-portal"]').textContent = "💎 Plan Active";
-            document.querySelector('[onclick*="pricing-portal"]').style.background = "var(--neon-green)";
-            logTerminal("[SYSTEM] License updated. Advanced Neural Processing Array unlocked.");
+            document.getElementById('nav-premium-btn').textContent = "💎 Plan Active";
+            document.getElementById('nav-premium-btn').style.background = "var(--neon-green)";
+            logTerminal("[SYSTEM] License mapped. Premium data parsing arrays fully operational.");
+        }
+
+        // The VIP Staff Bypass Routine Override
+        function applyUltraStaffLayout() {
+            document.getElementById('current-tier').textContent = "ULTRA_STAFF";
+            document.getElementById('current-tier').style.color = "var(--ultra-red)";
+            document.getElementById('current-tier').style.textShadow = "var(--staff-glow)";
+            
+            document.getElementById('nav-premium-btn').textContent = "👑 OVERLORD ACCESS";
+            document.getElementById('nav-premium-btn').style.background = "linear-gradient(135deg, var(--ultra-red), #ff00ff)";
+            document.getElementById('nav-premium-btn').style.boxShadow = "var(--staff-glow)";
+            document.getElementById('nav-premium-btn').style.color = "white";
+
+            document.getElementById('badge-gpt-text').textContent = "ULTRA UNLOCKED";
+            document.getElementById('badge-gpt-text').className = "badge badge-ultra";
+            document.getElementById('badge-claude-text').textContent = "ULTRA UNLOCKED";
+            document.getElementById('badge-claude-text').className = "badge badge-ultra";
+
+            logTerminal("⚡ [OVERRIDE] STAFF CLEARANCE DETECTED. BYPASSING CRYPTO PAYWALLS. EVERY AI VECTOR ENABLED.");
         }
 
         function activateModel(endpoint, cardId) {
@@ -570,12 +699,12 @@
             document.getElementById('card-gpt').style.borderColor = 'var(--panel-border)';
             document.getElementById('card-claude').style.borderColor = 'var(--panel-border)';
             document.getElementById(cardId).style.borderColor = 'var(--neon-blue)';
-            logTerminal(`[ENGINE] Primary model array shifted to target route: ${endpoint}`);
+            logTerminal(`[ENGINE] Primary pipeline channel bound to model cluster route: ${endpoint}`);
         }
 
         function verifyAccess(endpoint, cardId) {
-            if(!subscriptionUnlocked) {
-                alert("🔒 Access Denied. Premium neural networks require an active Monthly or Annual model license framework!");
+            if(userAccessLevel !== "PREMIUM" && userAccessLevel !== "ULTRA_STAFF") {
+                alert("🔒 Access Denied. Premium neural networks require an active Monthly/Annual plan or Staff clearance credentials!");
                 openPortal('pricing-portal');
                 return;
             }
@@ -591,7 +720,7 @@
             win.scrollTop = win.scrollHeight;
         }
 
-        // Live Communication Pipeline
+        // Live Communication Stream Handler
         async function dispatchMessage() {
             const inp = document.getElementById('user-input');
             const text = inp.value.trim();
@@ -599,7 +728,7 @@
 
             const apiKey = localStorage.getItem('master_or_key');
             if(!apiKey) {
-                alert("Please add an OpenRouter API key inside the settings cogwheel menu layout first!");
+                alert("Please click the settings cogwheel icon layout and supply an OpenRouter tracking backend routing key context first!");
                 toggleAdmin();
                 return;
             }
@@ -629,12 +758,12 @@
                 const data = await response.json();
                 if(data.choices && data.choices[0]) {
                     currentAIBubble.textContent = data.choices[0].message.content;
-                    logTerminal(`[NETWORK] Processed request size payload on route: ${selectedModelEndpoint}`);
+                    logTerminal(`[NETWORK] Stream request successfully processed via endpoint array path: ${selectedModelEndpoint}`);
                 } else {
-                    currentAIBubble.textContent = `Cluster Error: ${data.error ? data.error.message : 'Unauthenticated context.'}`;
+                    currentAIBubble.textContent = `Cluster Routing Exception: ${data.error ? data.error.message : 'Bad handshake configuration settings context.'}`;
                 }
             } catch (err) {
-                currentAIBubble.textContent = "Pipeline drop. Check network configs or key balances.";
+                currentAIBubble.textContent = "Data pipeline dropped out unexpectedly. Verify console state metrics or wallet limits.";
             }
         }
     </script>
